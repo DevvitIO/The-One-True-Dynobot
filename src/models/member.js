@@ -8,7 +8,8 @@ const memberSchema = new mongoose.Schema({
 	cookies: [
 		{
 			messageId: String,
-			date: Date
+			date: Date,
+			senderId: String
 		}
 	]
 });

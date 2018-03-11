@@ -1,48 +1,57 @@
 const Member = require('../models/member');
 
-const createReactionHandler = cb => async reaction => {
-	if (reaction.emoji.name === '🍪') {
-		const user = reaction.message.author;
+const createReactionHandler = cb => async (reaction, discordSender) => {
+	const discordReceiver = reaction.message.author;
 
-		let member = await Member.findById(user.id);
+	if (reaction.emoji.name === '🍪' && discordSender.id !== discordReceiver.id) {
+		let discordMembers = [discordSender, discordReceiver];
 
-		if (!member) {
-			member = new Member({
-				_id: user.id,
-				tag: user.tag,
-				username: user.username,
-				avatarURL: user.displayAvatarURL,
-				cookies: []
-			});
-		}
+		let members = await Promise.all(
+			discordMembers.map(user => Member.findById(user.id))
+		);
 
-		await cb(reaction, member);
+		members = members.map((member, i) => {
+			const { id, tag, username, displayAvatarURL } = discordMembers[i];
+			return (
+				member ||
+				new Member({
+					_id: id,
+					tag,
+					username,
+					avatarURL: displayAvatarURL,
+					cookies: []
+				})
+			);
+		});
 
-		member.save();
+		await cb(reaction, members);
+
+		members.map(member => member.save());
 	}
 };
 
 module.exports = client => {
 	client.on(
 		'messageReactionAdd',
-		createReactionHandler((reaction, member) => {
-			member.cookies.push({
+		createReactionHandler((reaction, [sender, receiver]) => {
+			receiver.cookies.push({
 				messageId: reaction.message.id,
-				date: new Date(Date.now())
+				date: new Date(Date.now()),
+				senderId: sender._id
 			});
 		})
 	);
 	client.on(
 		'messageReactionRemove',
-		createReactionHandler((reaction, member) => {
-			const i = member.cookies.findIndex(
+		createReactionHandler((reaction, [sender, receiver]) => {
+			const i = receiver.cookies.findIndex(
 				cookie => cookie.messageId === reaction.message.id
 			);
 			if (i < 0) {
 				return;
 			}
 
-			member.cookies.splice(i, 1);
+			receiver.cookies.splice(i, 1);
 		})
 	);
 };
